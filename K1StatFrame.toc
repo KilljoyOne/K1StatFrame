@@ -1,0 +1,7 @@
+## Interface: 120100
+## Title: K1 Stat Frame
+## Notes: Displays Critical Strike, Haste, Mastery, and Versatility raw ratings and percentages on the Character Sheet.
+## Author: KilljoyOne
+## Version: @project-version@
+
+Core/K1StatFrame.lua
