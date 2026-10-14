@@ -1,4 +1,4 @@
-## Interface: 120100
+## Interface: 120105
 ## Title: K1 Stat Frame
 ## Notes: Displays Critical Strike, Haste, Mastery, and Versatility raw ratings and percentages on the Character Sheet.
 ## Author: KilljoyOne
