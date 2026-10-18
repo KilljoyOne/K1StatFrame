@@ -500,3 +500,19 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         SaveCurrentCharacterData()
     end
 end)
+
+
+-------------------------------------------------------------------------------
+-- 5. SLASH COMMANDS
+-------------------------------------------------------------------------------
+SLASH_K1SUMMARY1 = "/k1s"
+SLASH_K1SUMMARY2 = "/k1summary"
+
+SlashCmdList["K1SUMMARY"] = function(msg)
+    if summaryFrame:IsShown() then
+        summaryFrame:Hide()
+    else
+        RefreshSummaryWindow()
+        summaryFrame:Show()
+    end
+end
