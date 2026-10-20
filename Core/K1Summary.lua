@@ -60,13 +60,44 @@ local function GetCalculatedItemLevel()
     return 0
 end
 
+-- Helper: Count completed slots individually per category (Raid, Mythic+/Dungeons, World/Delves)
+local function GetGreatVaultBreakdown()
+    if not C_WeeklyRewards or type(C_WeeklyRewards.GetActivities) ~= "function" then
+        return 0, 0, 0
+    end
+
+    local raidCount, dungeonCount, worldCount = 0, 0, 0
+
+    local ok, activities = pcall(C_WeeklyRewards.GetActivities)
+    if ok and type(activities) == "table" then
+        for _, activity in ipairs(activities) do
+            if activity and activity.progress and activity.threshold and activity.progress >= activity.threshold then
+                -- Match activity type to Raid, Dungeon (M+), or World/Delves
+                local actType = activity.type
+                local raidEnum = (Enum and Enum.WeeklyRewardChestThresholdType and Enum.WeeklyRewardChestThresholdType.Raid) or 3
+                local mplusEnum = (Enum and Enum.WeeklyRewardChestThresholdType and Enum.WeeklyRewardChestThresholdType.MythicPlus) or 1
+                
+                if actType == raidEnum then
+                    raidCount = raidCount + 1
+                elseif actType == mplusEnum then
+                    dungeonCount = dungeonCount + 1
+                else
+                    worldCount = worldCount + 1
+                end
+            end
+        end
+    end
+
+    return math.min(3, raidCount), math.min(3, dungeonCount), math.min(3, worldCount)
+end
+
 local function SaveCurrentCharacterData()
     InitDB()
     local pKey = GetPlayerKey()
     if not pKey then return end
 
     if not K1StatFrameDB.chars[pKey] then
-        K1StatFrameDB.chars[pKey] = { playedTotal = 0, ilvl = 0, gold = 0 }
+        K1StatFrameDB.chars[pKey] = { playedTotal = 0, ilvl = 0, gold = 0, vaultRaid = 0, vaultDungeon = 0, vaultWorld = 0 }
     end
 
     local char = K1StatFrameDB.chars[pKey]
@@ -77,13 +108,20 @@ local function SaveCurrentCharacterData()
     char.className = (type(UnitClass) == "function") and UnitClass("player") or "Warrior"
     char.lastSeen = time()
 
-    -- Only overwrite Gold if a valid amount > 0 is returned or if no gold is recorded yet
+    -- Save Great Vault activity breakdown
+    local r, d, w = GetGreatVaultBreakdown()
+    char.vaultRaid = r
+    char.vaultDungeon = d
+    char.vaultWorld = w
+    char.vaultSlots = r + d + w
+
+    -- Save Gold
     local currentGold = (type(GetMoney) == "function") and GetMoney() or 0
     if currentGold > 0 or not char.gold then
         char.gold = currentGold
     end
 
-    -- Only overwrite iLvl if valid > 0 value is parsed or if no iLvl is recorded yet
+    -- Save iLvl
     local currentIlvl = GetCalculatedItemLevel()
     if currentIlvl > 0 or not char.ilvl then
         char.ilvl = currentIlvl
@@ -128,10 +166,10 @@ end
 -- 2. ACCOUNT SUMMARY WINDOW
 -------------------------------------------------------------------------------
 local summaryFrame = CreateFrame("Frame", "K1SummaryWindow", UIParent, "BackdropTemplate")
-summaryFrame:SetSize(620, 360)
+summaryFrame:SetSize(720, 360)
 
 if type(summaryFrame.SetResizeBounds) == "function" then
-    summaryFrame:SetResizeBounds(520, 220)
+    summaryFrame:SetResizeBounds(620, 220)
 end
 
 summaryFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
@@ -184,9 +222,10 @@ columnHeaderFrame:SetHeight(20)
 local RefreshSummaryWindow
 
 local columns = {
-    { key = "name", label = "Character (Realm)", width = 190, align = "LEFT" },
-    { key = "level", label = "Lvl", width = 45, align = "CENTER" },
+    { key = "name", label = "Character (Realm)", width = 170, align = "LEFT" },
+    { key = "level", label = "Lvl", width = 40, align = "CENTER" },
     { key = "ilvl", label = "iLvl", width = 50, align = "CENTER" },
+    { key = "vault", label = "Vault (R / D / W)", width = 110, align = "CENTER" },
     { key = "time", label = "Play Time", width = 110, align = "LEFT" },
     { key = "gold", label = "Gold", width = 140, align = "LEFT" },
 }
@@ -234,7 +273,7 @@ scrollFrame:SetPoint("TOPLEFT", columnHeaderFrame, "BOTTOMLEFT", 0, -5)
 scrollFrame:SetPoint("BOTTOMRIGHT", summaryFrame, "BOTTOMRIGHT", -30, 45)
 
 local scrollContent = CreateFrame("Frame", nil, scrollFrame)
-scrollContent:SetSize(560, 100)
+scrollContent:SetSize(660, 100)
 scrollFrame:SetScrollChild(scrollContent)
 
 summaryFrame:SetScript("OnSizeChanged", function(self, width, height)
@@ -295,6 +334,8 @@ RefreshSummaryWindow = function()
             vA, vB = cA.level or 0, cB.level or 0
         elseif sortKey == "ilvl" then
             vA, vB = cA.ilvl or 0, cB.ilvl or 0
+        elseif sortKey == "vault" then
+            vA, vB = cA.vaultSlots or 0, cB.vaultSlots or 0
         elseif sortKey == "time" then
             vA = GetCurrentPlayTime(cA, a == currentPKey)
             vB = GetCurrentPlayTime(cB, b == currentPKey)
@@ -348,9 +389,16 @@ RefreshSummaryWindow = function()
             local charPlayed = GetCurrentPlayTime(char, isCurrent)
             local statusTag = isCurrent and " |cff00ff00[Online]|r" or ""
 
+            local r = char.vaultRaid or 0
+            local d = char.vaultDungeon or 0
+            local w = char.vaultWorld or 0
+            
+            local vaultBreakdownText = string.format("|cffffd100%dR|r |cff00a8ff%dD|r |cff00ff96%dW|r", r, d, w)
+
             row.cols["name"]:SetText("|c" .. classColorHex .. (char.name or "Unknown") .. "|r |cff888888(" .. (char.realm or "") .. ")|r" .. statusTag)
             row.cols["level"]:SetText("|cffffffff" .. (char.level or 0) .. "|r")
             row.cols["ilvl"]:SetText("|cff00ff96" .. (char.ilvl or 0) .. "|r")
+            row.cols["vault"]:SetText(vaultBreakdownText)
             row.cols["time"]:SetText(FormatTime(charPlayed))
             row.cols["gold"]:SetText(FormatGold(char.gold or 0))
 
@@ -466,6 +514,7 @@ eventFrame:RegisterEvent("PLAYER_LOGOUT")
 eventFrame:RegisterEvent("PLAYER_MONEY")
 eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 eventFrame:RegisterEvent("PLAYER_LEVEL_UP")
+eventFrame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -477,7 +526,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_ENTERING_WORLD" then
         InitDB()
         SaveCurrentCharacterData()
-        -- Re-save after 3 seconds to capture gold/item level after character caches finish
         C_Timer.After(3, function()
             SaveCurrentCharacterData()
         end)
@@ -500,7 +548,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         SaveCurrentCharacterData()
     end
 end)
-
 
 -------------------------------------------------------------------------------
 -- 5. SLASH COMMANDS
