@@ -72,7 +72,6 @@ local function GetGreatVaultBreakdown()
     if ok and type(activities) == "table" then
         for _, activity in ipairs(activities) do
             if activity and activity.progress and activity.threshold and activity.progress >= activity.threshold then
-                -- Match activity type to Raid, Dungeon (M+), or World/Delves
                 local actType = activity.type
                 local raidEnum = (Enum and Enum.WeeklyRewardChestThresholdType and Enum.WeeklyRewardChestThresholdType.Raid) or 3
                 local mplusEnum = (Enum and Enum.WeeklyRewardChestThresholdType and Enum.WeeklyRewardChestThresholdType.MythicPlus) or 1
@@ -108,12 +107,15 @@ local function SaveCurrentCharacterData()
     char.className = (type(UnitClass) == "function") and UnitClass("player") or "Warrior"
     char.lastSeen = time()
 
-    -- Save Great Vault activity breakdown
-    local r, d, w = GetGreatVaultBreakdown()
-    char.vaultRaid = r
-    char.vaultDungeon = d
-    char.vaultWorld = w
-    char.vaultSlots = r + d + w
+    -- Save Great Vault activity breakdown (API-ready overwrite allows 0 updates when vault is opened/reset)
+    local apiReady = (C_WeeklyRewards and type(C_WeeklyRewards.GetActivities) == "function")
+    if apiReady then
+        local r, d, w = GetGreatVaultBreakdown()
+        char.vaultRaid = r
+        char.vaultDungeon = d
+        char.vaultWorld = w
+        char.vaultSlots = r + d + w
+    end
 
     -- Save Gold
     local currentGold = (type(GetMoney) == "function") and GetMoney() or 0
